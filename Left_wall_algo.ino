@@ -20,34 +20,40 @@ int PWMB=5 ;// Motor B PWM speed control
 int mode = 0;
 int status;
 int pathIndex = 0;
-float Kp=50;
-float Ki=0.1;
-float Kd=1;
+float Kp=35;
+float Kd=55;
+float Ki=0;
 float error=0, P=0, I=0, D=0, PIDvalue=0;
 float previousError=0, previousI=0;
-int sensorPins[] = {25, 24, 23, 22,26, 27, 28, 29};
+int sensorPins[] = {25, 24, 23, 22 ,26, 27, 28, 29};
 int weights[] = {-3, -2, -1, 0, 0, 1, 2, 3};
 char path[100] = "";
 unsigned char pathLength = 0;
+
+
 int sensorValues[8] = {0};
-int baseSpeed=133;
-int extra_motorSpeed = 115;
+int baseSpeed=130;
+int extra_motorSpeed = 90;
 int rotateSpeed =80 ;
 int extraInch = 300;
 
-int Uturn = 1050;
 int adjGoAndTurn = 500;
 
 bool pass =false;
 
 int sidesensor = 35;
 
+int extra_after_cont = 0;
+
+int scndloop = 0;
+int greenLed = 51;
 
 void setup() {
 
   Serial.begin(9600);
   pinMode(STBY, OUTPUT);
   pinMode(LedPin, OUTPUT);
+  pinMode(greenLed,OUTPUT);
 
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
@@ -64,6 +70,7 @@ void setup() {
   mode = STOPPED;
   status=0;
   checkPIDvalues();
+  delay(2000);
 }  
 void loop(){
    Serial.println("Start First Pass");
@@ -73,34 +80,39 @@ void loop(){
 
   while(!pass){
   digitalWrite(LedPin, HIGH); 
+//  for(int i =0 ; i<5;i++){
+//     Serial.println(path[i]);}
+//     Serial.println("**********");
   if(!digitalRead(ActiveRun)){
   digitalWrite(LedPin, LOW); 
     pass=true;
     }
   }
  
-  // }
-  //    while (digitalRead(buttonPin) && !mode)
-  // {  
-  //   status=0;
-  // }
-  //   Serial.println("Starting 2nd Pass"); 
-  //   pathIndex = 0;
-  //   status = 0;
-  //   mazeOptimization();
-  //   Serial.println("End 2nd Pass");
-  // mode = STOPPED;
+  delay(2000);
+
+    Serial.println("Starting 2nd Pass"); 
+    pathIndex = 0;
+    status = 0;
+    if(scndloop==0){mazeOptimization();}
+    else{digitalWrite(greenLed, HIGH);}
+    Serial.println("End 2nd Pass");
+    status =1;
+    scndloop=1;
+  // mode = STOPPED;U
   // status = 0; // 1st pass
   // pathIndex = 0;
   // pathLength = 0;
+
 }
 
 void readLFSsensors() {
   for (int i = 0; i < 8; i++) {
     sensorValues[i] = digitalRead(sensorPins[i]);
-  }
+  } 
     if (allZeros(sensorValues)) {
     mode = CONT_LINE;  // All sensor values are 0
+ 
   } else if (sensorValues[0] == 0 && sensorValues[7] == 1) {
     mode = RIGHT_TURN;  // Right turn
   } else if (sensorValues[0] == 1 && sensorValues[7] == 0) {
@@ -112,10 +124,16 @@ void readLFSsensors() {
     //  Serial.println(error);
         mode=FOLLOWING_LINE;
   }
+       
 
+  if(mode == 3){
+    extra_after_cont+=1;
+  }else{
+    extra_after_cont=0;
+  }
 
-  // Serial.print("Current mode: ");
-  // Serial.println(mode);
+  Serial.print("Current mode: ");
+  Serial.println(mode);
   // Serial.print("Error: ");
   // Serial.println(error);
 }
@@ -168,10 +186,10 @@ void calculatePID(){
   PIDvalue = (Kp*P) + (Ki*I) + (Kd*D);
   previousError = error;
 
-   Serial.print("P: "); Serial.print(P);
-  Serial.print(" I: "); Serial.print(I);
-  Serial.print(" D: "); Serial.print(D);
-  Serial.print(" PID: "); Serial.println(PIDvalue);
+  //  Serial.print("P: "); Serial.print(P);
+  // Serial.print(" I: "); Serial.print(I);
+  // Serial.print(" D: "); Serial.print(D);
+  // Serial.print(" PID: "); Serial.println(PIDvalue);
 }
 void motorPIDcontrol(){
   int leftSpeed = constrain(baseSpeed+PIDvalue, 0, 255);
@@ -181,9 +199,10 @@ void motorPIDcontrol(){
   move(2, leftSpeed, 1); //motor 2, full speed, left  
 }
 void recIntersection(char direction) {
-  path[pathLength] = direction;  // Store the intersection in the path variable.
+  path[pathLength] = direction;//Store the intersection in the path variable.
+  Serial.println(direction);
   pathLength++;
-  simplifyPath();  // Simplify the learned path.
+  simplifyPath();  //Simplify the learned path.
 }
 void simplifyPath() {
   if (pathLength < 3 || path[pathLength - 2] != 'B') {
@@ -191,81 +210,91 @@ void simplifyPath() {
   }
 
   int totalAngle = 0;
-  for (int i = 1; i <= 3; i++) {
+  for (int i = 1;i <= 3; i++) {
     switch (path[pathLength - i]) {
       case 'R':
-        totalAngle += 90;
+        totalAngle+= 90;
         break;
       case 'L':
-        totalAngle += 270;
+        totalAngle+= 270;
         break;
       case 'B':
-        totalAngle += 180;
+        totalAngle+= 180;
         break;
     }
   }
 
-  totalAngle = totalAngle % 360;
+  totalAngle =totalAngle % 360;
 
-  switch (totalAngle) {
+  switch(totalAngle){
     case 0:
-      path[pathLength - 3] = 'S';
+      path[pathLength - 3]= 'S';
       break;
     case 90:
-      path[pathLength - 3] = 'R';
+      path[pathLength - 3]= 'R';
       break;
     case 180:
-      path[pathLength - 3] = 'B';
+      path[pathLength - 3]= 'B';
       break;
     case 270:
-      path[pathLength - 3] = 'L';
+      path[pathLength - 3]= 'L';
       break;
   }
 
-  pathLength -= 2;
+  pathLength-= 2;
 }
 void mazeSolve() {
   while (!status) {
     readLFSsensors();  
     switch (mode) {   
       case NO_LINE:
-      runExtraInch(extra_motorSpeed);
+        runExtraInch(extra_motorSpeed);
         motorStop();
-        rotate(rotateSpeed,0);//180 turn
         recIntersection('B');
+
+        rotate(rotateSpeed,0);//180 turn
         break;
       
       case CONT_LINE: 
         runExtraInch(extra_motorSpeed);
         readLFSsensors();
+
         if (mode != CONT_LINE) {
-          rotate(rotateSpeed,0);
           recIntersection('L');  // Assuming "T" or "Cross" goes left
+
+          rotate(rotateSpeed,0);
         } else {
           mazeEnd();
         }
         break;
         
       case RIGHT_TURN: 
+
         runExtraInch(extra_motorSpeed);
         readLFSsensors();
         if (mode == NO_LINE) {
-          rotate(rotateSpeed,1);
           recIntersection('R');
+
+          rotate(rotateSpeed,1);
         } else {
           recIntersection('S');
+          Serial.println("S");
         }
         break;   
         
       case LEFT_TURN:
         runExtraInch(extra_motorSpeed); 
-        rotate(rotateSpeed,0); 
+        // readLFSsensors();
         recIntersection('L');
+
+        rotate(rotateSpeed,0);
         break;   
      
       case FOLLOWING_LINE: 
+
         followingLine();
         // Serial.println("Following line");
+      
         break;      
     }
   }
@@ -281,8 +310,7 @@ void motorStop() {
 
 
 }
-void followingLine(void)
-{
+void followingLine(void){
   // move(1, 150, 0); //motor 1, full speed, left
   // move(2, 150, 1); //motor 2, full speed, left
    //readLFSsensors(); 
@@ -290,9 +318,8 @@ void followingLine(void)
    motorPIDcontrol();
    
 }
-void runExtraInch(int extra_motorSpeed)
-{
-  motorPIDcontrol();
+void runExtraInch(int extra_motorSpeed){
+  // motorPIDcontrol();
   move(1, extra_motorSpeed, 0); //motor 1,150 speed, left
   move(2, extra_motorSpeed, 1); //motor 2, 150 speed, left
   delay(extraInch);
@@ -307,9 +334,15 @@ void rotate(int motorSpeed,int direction) {
   while(true){
       move(1, motorSpeed, direction); //turn
       move(2, motorSpeed, direction); //turn
-      readLFSsensors();  
+  
+      readLFSsensors(); 
+      if(extra_after_cont>=10){
+        mazeEnd();
+        break;
+      }
 
-      if((sensorValues[0]==1)&&(sensorValues[1]==1)&&(sensorValues[2]==1)&&(sensorValues[3]==1)&&(sensorValues[4]==1)&&(sensorValues[5]==1)&&(sensorValues[6]==1)&&(sensorValues[7]==1)) {
+
+      if(allOnes(sensorValues)) {
           st=0;
       }
     if (sensorValues[3] == 0 && sensorValues[4] == 0 && st==0) {
@@ -345,97 +378,65 @@ void move(int motor, int speed, int direction){
 
 }
 
-void mazeEnd(void)
-{
+void mazeEnd(void){
   motorStop();
   for(int i=0;i<pathLength;i++)
-    Serial.print(path[i]);
-  Serial.print("  pathLenght ==> ");
+  Serial.print(path[i]);
+  Serial.print("~pathLenght ==> ");
   Serial.println(pathLength);
   status = 1;
   mode = STOPPED;
 }
-void rotate180(int motorSpeed) {
-  move(1, motorSpeed, 1); 
-  move(2, motorSpeed, 1); 
-  Serial.println("Taking U Turn");
-  delay(Uturn); 
-  motorStop();
+void mazeOptimization (void){
+  while (!status)
+  {
+    readLFSsensors();  
+    switch (mode)
+    {
+      case FOLLOWING_LINE:
+        followingLine();
+        break;    
+      case CONT_LINE:
+        if (pathIndex >= pathLength) mazeEnd (); 
+        else {mazeTurn(path[pathIndex]); pathIndex++;}
+        break;  
+      case LEFT_TURN:
+        if (pathIndex >= pathLength) mazeEnd (); 
+        else {mazeTurn(path[pathIndex]); pathIndex++;}
+        break;  
+      case RIGHT_TURN:
+        if (pathIndex >= pathLength) mazeEnd (); 
+        else {mazeTurn(path[pathIndex]); pathIndex++;}
+        break;   
+    }    
+   }  
 }
-// void mazeOptimization (void){
-//   while (!status)
-//   {
-//     readLFSsensors();  
-//     switch (mode)
-//     {
-//       case FOLLOWING_LINE:
-//         followingLine();
-//         break;    
-//       case CONT_LINE:
-//         if (pathIndex >= pathLength) mazeEnd (); 
-//         else {mazeTurn (path[pathIndex]); pathIndex++;}
-//         break;  
-//       case LEFT_TURN:
-//         if (pathIndex >= pathLength) mazeEnd (); 
-//         else {mazeTurn (path[pathIndex]); pathIndex++;}
-//         break;  
-//       case RIGHT_TURN:
-//         if (pathIndex >= pathLength) mazeEnd (); 
-//         else {mazeTurn (path[pathIndex]); pathIndex++;}
-//         break;   
-//     }    
-//    }  
-// }
 
 //-----------------------------------------------------
-// void mazeTurn (char dir) {
-//   switch(dir)
-//   {
-//     case 'L': // Turn Left
+void mazeTurn (char dir) {
+  switch(dir)
+  {
+    case 'L': // Turn Left
 
-//       runExtraInch(); 
-//       rotateLeft90(rotateSpeed);      
-//        break;   
+      runExtraInch(extra_motorSpeed); 
+      rotate(rotateSpeed,0);      
+       break;   
     
-//     case 'R': // Turn Right
-//       runExtraInch(); 
-//       rotateRight90(rotateSpeed);     
-//        break;   
+    case 'R': // Turn Right
+      runExtraInch(extra_motorSpeed); 
+      rotate(rotateSpeed,1);     
+       break;   
        
-//     case 'B': // Turn Back
-//        rotate180(rotateSpeed);     
-//        break;   
+    case 'B': // Turn Back
+      runExtraInch(extra_motorSpeed); 
+       rotate(rotateSpeed,0);     
+       break;   
        
-//     case 'S': // Go Straight
-//        //runExtraInch(extra_motorSpeed);
-//        followingLine(); 
-//        break;
-//   }
-// }
-
-int pingSide() {
-  long duration,cm;
-
-  pinMode(sidesensor, OUTPUT);
-  digitalWrite(sidesensor, LOW);
-  delayMicroseconds(2);
-  digitalWrite(sidesensor, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(sidesensor, LOW);
-
-  pinMode(sidesensor, INPUT);
-  duration = pulseIn(sidesensor, HIGH);
-
-  cm = microsecondsToCentimeters(duration);
-
-  if(cm==0){
-    return 0;
-  }else{
-    return 1;
+    case 'S': // Go Straight
+       runExtraInch(extra_motorSpeed);
+       followingLine(); 
+       break;
   }
-
 }
 
-long microsecondsToCentimeters(long microseconds) {
-  return microseconds / 29 / 2;
-}
+
